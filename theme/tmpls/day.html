@@ -1,0 +1,152 @@
+<div id="cal-day-box">
+	<div class="row-fluid cal-row-head">
+		<div class="span1 col-xs-1 cal-cell"><%= cal.locale.time %></div>
+		<div class="span11 col-xs-11 cal-cell"><%= cal.locale.events %></div>
+	</div>
+	<% if(all_day.length) {%>
+		<div class="row-fluid clearfix cal-day-hour">
+			<div class="span1 col-xs-1"><b><%= cal.locale.all_day %></b></div>
+			<div class="span11 col-xs-11">
+				<% _.each(all_day, function(event){ %>
+					<div class="day-highlight dh-<%= event.class %>">
+						<a href="<%= event.url ? event.url : 'javascript:void(0)' %>" data-event-id="<%= event.id %>"
+						   data-event-class="<%= event.class %>" class="event-item">
+							<%= event.title %></a>
+					</div>
+				<% }); %>
+			</div>
+		</div>
+	<% }; %>
+	<% if(before_time.length) {%>
+		<div class="row-fluid clearfix cal-day-hour">
+			<div class="span1 col-xs-3"><b><%= cal.locale.before_time %></b></div>
+			<div class="span5 col-xs-5">
+				<% _.each(before_time, function(event){ %>
+					<div class="day-highlight dh-<%= event.class %>">
+						<span class="cal-hours pull-right"><%= event.end_hour %></span>						
+                        <a href="<%= event.url ? event.url : 'javascript:void(0)' %>" data-event-id="<%= event.id %>"
+						   data-event-class="<%= event.class %>" class="event-item">
+							<%= event.title %></a>
+					</div>
+				<% }); %>
+			</div>
+		</div>
+	<% }; %>
+	<div id="cal-day-panel" class="clearfix">
+		<% _.each(by_hour, function(event){%> 
+			<div class="pull-left day-event day-highlight dh-<%= event.class %>" style="margin-top: <%= (event.top * 30) %>px; height: <%= (event.lines * 30) %>px">
+				<span class="cal-hours"><%= event.start_hour %> - <%= event.end_hour %></span>
+				<a href="<%= event.url ? event.url : 'javascript:void(0)' %>" data-event-id="<%= event.id %>"
+						   data-event-class="<%= event.class %>" class="event-item">
+							<%= event.title %> (<i><%= event.status %></i>)</a>
+			</div>
+		<% }); %> 
+
+		<div id="cal-day-panel-hour">	
+            <%  
+              var disable_day=0;
+              var hoy=cal._get_current_ddmmyyyy();
+              var dia=cal._convert_yyymmdd_ddmmyyyy(cal.options.day);
+              //Si hoy es mayor que la fecha seleccionada en el calendario, desabilita
+              if(cal._compare_dates(hoy,dia)){
+              		var disable_day=1;              	
+              } 	
+              //Si hoy es igual al dia seleccionado, desabilita, para no dejar eventos para el mismo dia.
+              if(hoy==dia){
+              	var disable_day=1; 
+              }
+              
+              //Valida los dias no habiles de la semana, en caso de tener un dia no habil, configurado
+              //no deja habilitar las horas del dia
+              var days_enabled_int=new Array;
+              if(cal.options.dias_semana_no_habiles.length>0){
+              		for(k=0;k<cal.options.dias_semana_no_habiles.length;k++){
+                        days_enabled_int[k]=parseInt(cal.options.dias_semana_no_habiles[k],10)
+                   }
+              }
+              
+              if(days_enabled_int.indexOf(day_week_default)!=-1) {//aqui se usa el dia de la semana que trae javascript, porque ese comioenza en domingo
+                    var disable_day=1;
+              }; 
+              
+              //Valida dias festivos 
+              if(cal.options.dias_no_habiles.length>0){
+              		for(k=0;k<cal.options.dias_no_habiles.length;k++){
+                        var array_dias=cal.options.dias_no_habiles[k].split(",");
+                        var fecha=array_dias[0].substring(array_dias[0].indexOf('"')+1,(array_dias[0].length) -1);
+                        var array_fecha=fecha.split("/");
+                			
+                        var fecha_convert=array_fecha[2]+"-"+array_fecha[0]+"-"+array_fecha[1];
+                        if(fecha_convert==cal.options.day){
+                        		var disable_day=1;
+                             break;   
+                        }
+                      } 
+              }
+              
+              
+              for(i = 0; i < hours; i++){%>
+              <% 	var enable_hour_day=0;
+					if(cal.options.semana_horas_habiles.length>0){
+                      var hours_enabled_string=cal.options.semana_horas_habiles[day_week];
+                      var hours_enabled_int=new Array;
+                      for(k=0;k<hours_enabled_string.length;k++){
+                        hours_enabled_int[k]=parseInt(hours_enabled_string[k],10)
+                      }
+                               
+                        if(hours_enabled_int.indexOf(cal._hour_only(i))!=-1) {
+                            var enable_hour_day=1;
+                        };
+                  };   
+              %> 
+				 			              
+                    <div class="cal-day-hour">
+                        <% for(l = 0; l < in_hour; l++){ %> 
+                            <div class="row-fluid cal-day-hour-part">
+                                <div class="span1 col-xs-1"> 
+                                    <%   //si esta habilitada la hora para el usuario, lo deja pasar
+                                         //si el usuario no es especialista, lo deja pasar
+                                         //Si el calendario tiene seleccionado un especialista en los filtros, lo deja pasar
+                                         //si el dia no esta desabilitado, lo deja pasar. 
+                                         //si el dia no es habil, como un domingo  no deja pasar
+                                    
+                                    	if(enable_hour_day==1 && cal.options.es_especialista==1 && cal.options.bloquea_add_hour==0 && disable_day==0) {
+                                    	 var url="";
+                                         if(cal.options.filter_url!=""){  
+                                        	var url=cal.options.filter_url.id_especialidad+"/"+
+                                                   cal.options.filter_url.id_pais+"/"+
+                                                   cal.options.filter_url.id_depto+"/"+
+                                                   cal.options.filter_url.id_ciudad+"/"+
+                                                   cal.options.filter_url.id_sede+"/"+
+                                                   cal.options.filter_url.id_especialista;
+                                        }
+                                    %> 
+                                    	<b><a href="<%= cal.options.base_url %>/agendamiento/calendario/nuevo/directo/<%= cal.options.day %>/<%= cal._hour(i, l) %>/<%=url%>" data-toggle="tooltip" title="Adicionar evento en esta hora"><%= cal._hour(i, l) %></a></b>
+                                		<% }else{%>
+                                       <b><%= cal._hour(i, l) %></b> 
+                                    <% };%>     
+                                </div>
+                                <div class="span11 col-xs-11"></div>
+                            </div>
+                    <% }; %>
+                    </div> 
+                
+			<% }; %>
+		</div>
+	</div>
+	<% if(after_time.length) {%>
+	<div class="row-fluid clearfix cal-day-hour">
+		<div class="span1 col-xs-3"><b><%= cal.locale.after_time %></b></div>
+		<div class="span11 col-xs-9">
+			<% _.each(after_time, function(event){ %>
+			<div class="day-highlight dh-<%= event.class %>">
+				<span class="cal-hours"><%= event.start_hour %></span>
+				<a href="<%= event.url ? event.url : 'javascript:void(0)' %>" data-event-id="<%= event.id %>"
+						   data-event-class="<%= event.class %>" class="event-item">
+							<%= event.title %></a>
+			</div>
+			<% }); %>
+		</div>
+	</div>
+	<% }; %>
+</div>

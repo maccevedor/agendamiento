@@ -1,0 +1,5 @@
+name = "Agendamiento"
+description = "Sistema de AGENDAMIENTO GENERICO para Atenea suite, este modulo permite la creacion, y seguimiento de eventos para las diferentes campañas que soliciten llevar su control de agendamiento y que encajan en el sistema GENERICO"
+package = Atenea
+version = "7.x"
+core = "7.x"

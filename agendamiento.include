@@ -1,0 +1,1331 @@
+<?php
+
+/**
+ * @file
+ * Archivo de funciones del modulo Agendamiento.
+ */
+ 
+
+
+/**
+  * _agendamiento_calendario
+  * genera el calendario de eventos
+**/ 
+function _agendamiento_calendario(){
+	global $base_url;
+	
+	$jerarquia=_agendamiento_get_jerarquia();//se carga la jeraquia de Pais, Departamento, Ciudad, Sede	
+	$especialidades=_agendamiento_get_especialidades_calendario();
+	$variables=_agendamiento_get_variables();
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	drupal_add_js( array( 'agendamiento_path' => $path ), 'setting' );
+	drupal_add_js( array( 'base_url' => $base_url ), 'setting' );
+	drupal_add_js( array( 'agendamiento_vars' => $variables ), 'setting' );
+	drupal_add_js( array( 'jerarquia' => $jerarquia ), 'setting' );
+	drupal_add_js( array( 'especialidades' => $especialidades ), 'setting' );
+	
+	drupal_add_css('//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css','external');
+	drupal_add_css($path.'/theme/css/calendar.css');
+	drupal_add_css($path.'/theme/css/agendamiento.css'); 
+	
+	drupal_add_js($path.'/theme/js/jquery.min.js');
+	drupal_add_js('//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js','external');
+	drupal_add_js($path.'/theme/js/language/es-ES.js');
+	drupal_add_js($path.'/theme/js/underscore-min.js');
+	drupal_add_js($path.'/theme/js/calendar.js');	 
+	
+	$output = theme('agendamiento_calendario_vista');  
+	return $output;
+}
+ 
+
+/**
+  * _agendamiento_get_variables
+  * obtiene las variables de configuración para el calendario y el datepicker
+**/  
+function _agendamiento_get_variables(){
+	global $user;
+	$user_data = user_load($user->uid);
+	$es_especialista=0;
+	$es_asesor_agendamiento=0;
+	$es_lider_agendamiento=0;
+	
+	$data=_agendamiento_get_servicio_configuracion();
+	
+	//Se recorren los roles del usuario, para saber si tiene el rol de especialista en agendamiento, en caso de 
+	//tener este rol, se procede a verificar si se tiene configurado, la informacion de horario inicial y final de actividad diaria
+	foreach($user_data->roles as $key=>$value){
+		if($key==504){//Rol de asesor
+			$es_lider_agendamiento=1; //indica que es un asesor	
+		}//fin de evaluacion de rol
+		
+		if($key==503){//Rol de asesor
+			$es_asesor_agendamiento=1; //indica que es un asesor	
+		}//fin de evaluacion de rol
+		
+		if($key==523){//Rol de especialista, si coincide con el rol del usuario, se da opcion a setear el horario de trabajo configuraro para el
+			
+			$es_especialista=1; //indica que es un especialista, por lo tanto esta variable ayudara a validar que solo se muestre lo de especialista en lso filtros	
+			_agendamiento_get_usuario_configuracion($user->uid,$data);
+			
+						
+		}//fin de evaluacion de rol	
+	}
+	
+	
+	$variables=array("semana_horas_habiles"=>$data["semana_horas_habiles"],
+					 "semana_hora_inicio"=>$data["semana_hora_inicio"],
+					 "semana_hora_fin"=>$data["semana_hora_fin"],
+					 "semana_tiempo_evento"=>$data["semana_tiempo_evento"],						  
+					 "horas_habiles"=>$data["horas_habiles"], 
+					 "hora_inicio"=>$data["hora_inicio"],//Hora inicial que se usa para el calendario de eventos
+					 "hora_fin"=>$data["hora_fin"],//Hora final que se usa para el calendario de eventos
+					 "tiempo_evento"=>$data["tiempo_evento"], // tiempo de duración de un evento, sirve para el calendario y para el datetimepicker
+					 "dias_semana_no_habiles"=>$data["dias_semana_no_habiles"],	//dias de la semana no habiles, 0,1,2,3,4,5,6 = Domingo,lunes,martes,miercoles,jueves,viernes,sabado
+					 "dias_no_habiles"=>$data["dias_no_habiles"],
+					 "habilita_fecha_hasta"=>$data["habilita_fecha_hasta"],//Define si la fecha del datetimepicker se muestra o no					 
+					 "vista_default_calendario"=>$data["vista_default_calendario"],	//Vista por defecto que mostrara el calendario de eventos [month,week,day, year]
+					 "permite_fechas_pasado"=>$data["permite_fechas_pasado"], // o= indica que no se permiten fechas en el pasado, y 1 que si.					 
+					 "muestra_pais"=>$data["muestra_pais"],//1161, // define si muestra el pais en la creacion de una cita, 0 indica que no muestra, cualquier valor diferente es el id del pais a mostrar					 
+					 "asignacion_especialista"=>$data["asignacion_especialista"],  //Valores aceptados manual,automatico,aleatorio
+					 "es_asesor_agendamiento"=>$es_asesor_agendamiento,
+					 "es_lider_agendamiento"=>$es_lider_agendamiento,
+					 "es_especialista"=>$es_especialista,
+					 "permite_misma_hora"=>$data["permite_misma_hora"],
+					 "maximo_reagendamientos"=>$data["maximo_reagendamientos"],
+					 "edad_minima_cliente"=>18,
+					 );
+	
+	return $variables;
+}
+
+
+function _agendamiento_get_servicio_configuracion(){
+	global $user;
+	$user_data = user_load($user->uid);
+	
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	$term=taxonomy_term_load($id_servicio);
+
+	
+	$data["semana_horas_habiles"]=array();
+	$data["semana_hora_inicio"]=array();
+	$data["semana_hora_fin"]=array();
+	$data["semana_tiempo_evento"]=array();
+
+	for($i=0;$i<=6;$i++){
+		$data["semana_horas_habiles"][$i]=array();
+		if(isset($term->field_aghodh[LANGUAGE_NONE])){
+			foreach($term->field_aghodh[LANGUAGE_NONE] as $hora){
+				$data["semana_horas_habiles"][$i][]=$hora["value"];	
+			}
+		}
+		
+		$data["semana_tiempo_evento"][$i]=array();
+		if(isset($term->field_agtiev[LANGUAGE_NONE])){
+			foreach($term->field_agtiev[LANGUAGE_NONE] as $hora){
+				$data["semana_tiempo_evento"][$i][]=$hora["value"];	
+			}
+		}
+	
+		
+		$data["semana_hora_inicio"][$i]="";
+		if(isset($term->field_aghoin[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+			$data["semana_hora_inicio"][$i]=$term->field_aghoin[LANGUAGE_NONE][0]["value"];
+		}
+		
+		$data["semana_hora_fin"][$i]="";
+		if(isset($term->field_aghofi[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+			$data["semana_hora_fin"][$i]=$term->field_aghofi[LANGUAGE_NONE][0]["value"];
+		}		
+	}
+	
+	//configuracion
+	$data["dias_semana_no_habiles"]=array();
+	if(isset($term->field_agdanh[LANGUAGE_NONE])){
+		foreach($term->field_agdanh[LANGUAGE_NONE] as $dia){
+			$data["dias_semana_no_habiles"][]=$dia["value"];	
+		}
+	}
+	
+	//configuracion
+	$data["horas_habiles"]=array();
+	if(isset($term->field_aghodh[LANGUAGE_NONE])){
+		foreach($term->field_aghodh[LANGUAGE_NONE] as $hora){
+			$data["horas_habiles"][]=$hora["value"];	
+		}
+	}
+		
+	//configuracion
+	$data["hora_inicio"]="";	
+	if(isset($term->field_aghoin[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["hora_inicio"]=$term->field_aghoin[LANGUAGE_NONE][0]["value"];
+	}
+	
+	//configuracion
+	$data["hora_fin"]="";	
+	if(isset($term->field_aghofi[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["hora_fin"]=$term->field_aghofi[LANGUAGE_NONE][0]["value"];
+	}
+
+	//configuracion
+	$data["vista_default_calendario"]="";	
+	if(isset($term->field_agvscl[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["vista_default_calendario"]=$term->field_agvscl[LANGUAGE_NONE][0]["value"];
+	}
+	
+	//configuracion
+	$data["tiempo_evento"]="";	
+	if(isset($term->field_agtiev[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["tiempo_evento"]=$term->field_agtiev[LANGUAGE_NONE][0]["value"];
+	}
+	
+	//configuracion
+	$data["habilita_fecha_hasta"]="";	
+	if(isset($term->field_aghafh[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["habilita_fecha_hasta"]=$term->field_aghafh[LANGUAGE_NONE][0]["value"];
+	}
+	
+	//configuracion
+	$data["permite_fechas_pasado"]="";	
+	if(isset($term->field_agfepa[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["permite_fechas_pasado"]=$term->field_agfepa[LANGUAGE_NONE][0]["value"];
+	}
+	
+	
+	//configuracion
+	$data["muestra_pais"]="";	
+	if(isset($term->field_pais[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["muestra_pais"]=$term->field_pais[LANGUAGE_NONE][0]["tid"];
+	}
+	
+	//configuracion
+	$data["asignacion_especialista"]="";	
+	if(isset($term->field_agasep[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["asignacion_especialista"]=$term->field_agasep[LANGUAGE_NONE][0]["value"];
+	}
+	
+	//configuracion
+	$data["permite_misma_hora"]="";	
+	if(isset($term->field_agcimh[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["permite_misma_hora"]=$term->field_agcimh[LANGUAGE_NONE][0]["value"];
+	}
+	
+	//configuracion
+	$data["maximo_reagendamientos"]="2";	//si no tiene nada configurado, tomamos el 2
+	if(isset($term->field_agmxra[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+		$data["maximo_reagendamientos"]=$term->field_agmxra[LANGUAGE_NONE][0]["value"];
+	}
+	
+	
+	
+	//configuracion 
+	$config_festivos_fijos=variable_get('festivos_fijos','');  		
+	$array_fijos = explode("\r\n", $config_festivos_fijos);
+	$festivos=array();	
+	foreach($array_fijos as $fecha){
+		$fecha=str_replace("*",date("Y"),$fecha);
+		$festivos[]='moment("'.$fecha.'","MM/DD/YYYY")';	
+	}
+	
+	$config_festivos_variables=variable_get('festivos_variables','');  		
+	$array_variables = explode("\r\n", $config_festivos_variables);
+	foreach($array_variables as $fecha){
+		$festivos[]='moment("'.$fecha.'","MM/DD/YYYY")';	
+	}
+	 
+	$data["dias_no_habiles"]=$festivos;
+		
+	return $data; 
+}
+
+
+
+
+function _agendamiento_get_usuario_configuracion($user_id,&$data){
+	$user_data = user_load($user_id);	
+	
+	//Malla semanal de configuracion del usuario
+	
+	if(isset($user_data->field_agmalla[LANGUAGE_NONE])){
+		$dias=array("aglun","agmar","agmier","agjue","agvie","agsab","agdom");
+		
+		$id_malla=$user_data->field_agmalla[LANGUAGE_NONE][0]["value"];
+		$item_malla=entity_load('field_collection_item', array($id_malla));	// se obtiene la colleccion completa del campo
+		
+		$data["semana_horas_habiles"]=array();
+		$data["semana_hora_inicio"]=array();
+		$data["semana_hora_fin"]=array();
+		$data["semana_tiempo_evento"]=array();
+		$data["dias_semana_no_habiles"]=array();
+		
+		$i=0;
+		foreach($dias as $dia){
+			$campo="field_$dia";
+			$id_item=$item_malla[$id_malla]->{$campo}[LANGUAGE_NONE][0]["value"];//Obtiene configuracion del dia
+			$item_horario=entity_load('field_collection_item', array($id_item));
+			$horario=$item_horario[$id_item]->field_aghor[LANGUAGE_NONE][0]["value"];
+			$config=entity_load('field_collection_item', array($horario));
+						
+			//Se recorre el array de las horas habiles por cada dia y se almacenan en $data en la posicion del dia
+			// por defecto se inicia en cero, que es el lunes		
+			
+			$data["semana_horas_habiles"][$i]=array(); //se inicia en vacio el array de ese dia, antes de cargar configuracion
+			$horas_habiles=array();
+			
+			if(isset($config[$horario]->field_aghorh[LANGUAGE_NONE])){
+				foreach($config[$horario]->field_aghorh[LANGUAGE_NONE] as $hora){
+					$horas_habiles[]=$hora["value"];	
+				}
+				$data["semana_horas_habiles"][$i]=$horas_habiles;
+			}
+
+			//configuracion de hora de inicio			
+			$data["semana_hora_inicio"][$i]="";	
+			if(isset($config[$horario]->field_aghori[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+				$data["semana_hora_inicio"][$i]=$config[$horario]->field_aghori[LANGUAGE_NONE][0]["value"];
+			}
+			
+			//configuracion de hora de fin			
+			$data["semana_hora_fin"][$i]="";	
+			if(isset($config[$horario]->field_aghorf[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+				$data["semana_hora_fin"][$i]=$config[$horario]->field_aghorf[LANGUAGE_NONE][0]["value"];
+			}
+			
+			//configuracion de tiempo evento			
+			$data["semana_tiempo_evento"][$i]="";	
+			if(isset($config[$horario]->field_agtiee[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+				$data["semana_tiempo_evento"][$i]=$config[$horario]->field_agtiee[LANGUAGE_NONE][0]["value"];
+			}	
+			
+
+			$i++;
+		}				
+	}else{		
+		//Como no tiene malla semanal, se arma una por defecto con los datos del servicio
+		$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+		$term=taxonomy_term_load($id_servicio);
+			for($i=0;$i<=6;$i++){
+				$data["semana_horas_habiles"][$i]=array();
+				if(isset($term->field_aghodh[LANGUAGE_NONE])){
+					foreach($term->field_aghodh[LANGUAGE_NONE] as $hora){
+						$data["semana_horas_habiles"][$i][]=$hora["value"];	
+					}
+				}
+				
+				$data["semana_tiempo_evento"][$i]=array();
+				if(isset($term->field_agtiev[LANGUAGE_NONE])){
+					foreach($term->field_agtiev[LANGUAGE_NONE] as $hora){
+						$data["semana_tiempo_evento"][$i][]=$hora["value"];	
+					}
+				}
+				
+				$data["semana_hora_inicio"][$i]="";
+				if(isset($term->field_aghoin[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+					$data["semana_hora_inicio"][$i]=$term->field_aghoin[LANGUAGE_NONE][0]["value"];
+				}
+				
+				$data["semana_hora_fin"][$i]="";
+				if(isset($term->field_aghofi[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+					$data["semana_hora_fin"][$i]=$term->field_aghofi[LANGUAGE_NONE][0]["value"];
+				}		
+			}				
+	}	
+	
+	$data["dias_semana_no_habiles"]=array();
+	if(isset($user_data->field_agdnoh[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion		
+		foreach($user_data->field_agdnoh[LANGUAGE_NONE] as $dia){
+			$data["dias_semana_no_habiles"][]=$dia["value"];	
+		}
+	}
+	
+	$data["medios_atencion"]=array();
+	if(isset($user_data->field_agmeat[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion		
+		$i=0; 
+		foreach($user_data->field_agmeat[LANGUAGE_NONE] as $medio){
+			$term_medio=taxonomy_term_load($medio["tid"]);
+			$codigo=0;
+			if(isset($term_medio->field_agmacd[LANGUAGE_NONE])){
+				$codigo=$term_medio->field_agmacd[LANGUAGE_NONE][0]["value"];	
+			}
+			$data["medios_atencion"][$i]["id"]=$codigo;
+			$data["medios_atencion"][$i]["text"]=strtoupper($term_medio->name);
+			$i++; 
+		}
+	}
+	
+	$data["vista_default_calendario"]="";
+	if(isset($user_data->field_agvtca[LANGUAGE_NONE])){
+		$data["vista_default_calendario"]=$user_data->field_agvtca[LANGUAGE_NONE][0]["value"];
+	}
+	
+	
+}
+
+ 
+ 
+
+/**
+  * _agendamiento_get_eventos
+  * obtiene los eventos almacenados, para mostrar en el calendario
+**/ 
+function _agendamiento_get_eventos(){
+	global $user,$base_url;
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$datos=array();
+	$datos["filtro_estado"]="";
+	
+	if(isset($_GET["id_estado"])){
+		if($_GET["id_estado"]!=0 && $_GET["id_estado"]!="undefined"){
+			$estados_get=explode("|",$_GET["id_estado"]);
+			$estados=implode(",",$estados_get);
+			if($estados!=""){		
+				$datos["filtro_estado"]=" AND estado_id IN (".$estados.") ";
+			}
+		}		
+	}
+
+		
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_especialidad"]=is_numeric($_GET["id_especialidad"])?$_GET["id_especialidad"]:0;
+	$datos["id_pais"]=is_numeric($_GET["id_pais"])?$_GET["id_pais"]:0;
+	$datos["id_depto"]=is_numeric($_GET["id_depto"])?$_GET["id_depto"]:0;
+	$datos["id_ciudad"]=is_numeric($_GET["id_ciudad"])?$_GET["id_ciudad"]:0;
+	$datos["id_sede"]=is_numeric($_GET["id_sede"])?$_GET["id_sede"]:0;
+	$datos["id_especialista"]=is_numeric($_GET["id_especialista"])?$_GET["id_especialista"]:0;
+	$datos["inicio"]=date('d-m-Y', ($_GET['from'] / 1000));
+	$datos["fin"]=date('d-m-Y', ($_GET['to'] / 1000));
+	$datos["base_url"]=$base_url;
+	
+	 
+	//Se recorren los roles del usuario, para saber si tiene el rol de especialista en agendamiento, en caso de 
+	//tener este rol, se procede a verificar si se tiene configurado, la informacion de horario inicial y final de actividad diaria
+	foreach($user_data->roles as $key=>$value){
+		if($key==523){//Rol de especialista
+			$datos["id_especialista"]=$user->uid;
+			$datos["id_especialidad"]=$user_data->field_agespc[LANGUAGE_NONE][0]["tid"];
+			$datos["id_sede"]=$user_data->field_agsede[LANGUAGE_NONE][0]["tid"];
+			$datos["id_ciudad"]=$user_data->field_ciudad[LANGUAGE_NONE][0]["tid"];
+			$datos["id_depto"]=$user_data->field_depto[LANGUAGE_NONE][0]["tid"];
+			$datos["id_pais"]=$user_data->field_pais[LANGUAGE_NONE][0]["tid"];
+			
+		}
+	}
+	
+	$resultado=_agendamiento_db_get_eventos($datos); 		
+	 echo json_encode(
+				array(
+					"success" => 1,
+					"result" => $resultado
+				)
+			);
+	
+}
+ 
+ 
+ 
+function _agendamiento_get_listado_eventos(){
+	global $user,$base_url;
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$datos=array();
+	$datos["filtro_estado"]="";
+	
+	if(isset($_POST["estado"])){
+		$estados=implode(",",$_POST["estado"]);		
+		if($estados!=""){		
+			$datos["filtro_estado"]=" AND estado_id IN (".$estados.") ";
+		}				
+	}
+	 		
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_especialidad"]=is_numeric($_POST["especialidad"])?$_POST["especialidad"]:0;
+	$datos["id_pais"]=is_numeric($_POST["pais"])?$_POST["pais"]:0;
+	$datos["id_depto"]=is_numeric($_POST["depto"])?$_POST["depto"]:0;
+	$datos["id_ciudad"]=is_numeric($_POST["ciudad"])?$_POST["ciudad"]:0;
+	$datos["id_sede"]=is_numeric($_POST["sede"])?$_POST["sede"]:0;
+	$datos["id_especialista"]=is_numeric($_POST["especialista"])?$_POST["especialista"]:0;
+	$datos["medio_atencion"]=is_numeric($_POST["medio_atencion"])?$_POST["medio_atencion"]:0;
+	$datos["numero_documento"]=$_POST["numero_documento"]!=""?$_POST["numero_documento"]:0;
+	$datos["codigo"]=$_POST["codigo"]!=""?$_POST["codigo"]:0;
+	$datos["pagina"]=is_numeric($_POST["pagina"])?$_POST["pagina"]:1;
+	$datos["registros"]=50;
+	
+	$datos["inicio"]=date('d-m-Y', strtotime('-15 day')) ;//date('d-m-Y', ($_GET['from'] / 1000));
+	$datos["fin"]=date('d-m-Y', strtotime('+15 day')) ;//date('d-m-Y', ($_GET['to'] / 1000));
+	$datos["base_url"]=$base_url;
+	
+	
+	
+    //Se recorren los roles del usuario, para saber si tiene el rol de especialista en agendamiento, en caso de 
+	//tener este rol, se procede a verificar si se tiene configurado, la informacion de horario inicial y final de actividad diaria
+	foreach($user_data->roles as $key=>$value){
+		if($key==523){//Rol de especialista
+			$datos["id_especialista"]=$user->uid;
+			$datos["id_especialidad"]=$user_data->field_agespc[LANGUAGE_NONE][0]["tid"];
+			$datos["id_sede"]=$user_data->field_agsede[LANGUAGE_NONE][0]["tid"];
+			$datos["id_ciudad"]=$user_data->field_ciudad[LANGUAGE_NONE][0]["tid"];
+			$datos["id_depto"]=$user_data->field_depto[LANGUAGE_NONE][0]["tid"];
+			$datos["id_pais"]=$user_data->field_pais[LANGUAGE_NONE][0]["tid"];
+			
+		}
+	}
+	
+	$resultado=_agendamiento_db_get_listado_eventos($datos); 
+	$output["status"]=1;
+	$output["html"] = theme('agendamiento_listado_eventos',array('datos' => $resultado));  
+	drupal_json_output($output);
+	exit(0);
+}
+ 
+ 
+ 
+function _agendamiento_get_evento_hora(){
+
+	global $user;
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$variables=_agendamiento_get_variables();
+	
+	$datos=array();
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_especialidad"]=is_numeric($_POST["especialidad"])?$_POST["especialidad"]:0;
+	$datos["id_pais"]=is_numeric($_POST["pais"])?$_POST["pais"]:0;
+	$datos["id_depto"]=is_numeric($_POST["depto"])?$_POST["depto"]:0;
+	$datos["id_ciudad"]=is_numeric($_POST["ciudad"])?$_POST["ciudad"]:0;
+	$datos["id_sede"]=is_numeric($_POST["sede"])?$_POST["sede"]:0;
+	$datos["id_especialista"]=is_numeric($_POST["especialista"])?$_POST["especialista"]:0;
+	$datos["inicio"]=str_replace("/","-",$_POST['fecha_desde']);
+	$datos["fin"]=str_replace("/","-",$_POST['fecha_hasta']);
+	$datos["id_estado"]=1;//verifica que no hayan citas activas en la misma hora. 
+	
+	if($variables["permite_misma_hora"]==0){//indica que no permite citas a la misma hora, por lo tanto debe validar
+		$resultado=_agendamiento_db_get_evento_hora($datos); 	
+		//si existe al menos un registro quiere decir que no se puede crear citas en esta hora para el especialista, por lo tanto 
+		//retorna el mensaje y no dejara enviar el formulario
+		if(count($resultado)>0){
+			$data["existe"]=1;
+			$data["msj"]="<h3 style='text-align:center;'><span class='label label-danger'>No hay disponibilidad</span></h3><br> <h4 style='text-align:justify;'>Ya existe un evento para el especialista seleccionado a la hora seleccionada, intente seleccionar otra hora. <h4>";		
+		}else{
+			$data["existe"]=0;
+			$data["msj"]="OK"; 
+		}
+	}else{ //si acepta citas a la misma hora con el mismo especialista, retorna un Ok, y permitira crear la cita
+		$data["existe"]=0;
+		$data["msj"]="OK";
+	}
+	drupal_json_output($data);
+	exit(0);
+} 
+ 
+ 
+ /**
+  * _agendamiento_get_evento
+  * obtiene los eventos almacenados, para mostrar en el calendario
+**/ 
+function _agendamiento_get_evento(){
+	global $user,$base_url;
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	/*$user_data = user_load($user->uid);
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);*/
+	drupal_add_js( array( 'base_url' => $base_url ), 'setting' ); 
+	
+	if(arg(2)=="evento"){
+		if(arg(3)){ $id_evento=arg(3);}else{$id_evento=0;}	
+	}
+	
+	$datos=array();
+	/*$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;*/
+	$datos["agendamiento_id"]=$id_evento;
+	$datos["base_url"]=$base_url; 
+	
+	$resultado=_agendamiento_get_evento_datos($datos);
+	$output = theme('agendamiento_calendario_evento',array('datos' => $resultado));	
+	/*$resultado=_agendamiento_db_get_evento($datos); 	 
+	$output = theme('agendamiento_calendario_evento',array('datos' => $resultado));*/
+	echo $output;
+	exit(0);
+	
+}
+
+
+ /**
+  * _agendamiento_get_evento
+  * obtiene los eventos almacenados, para mostrar en el calendario
+**/ 
+function _agendamiento_get_evento_datos($datos){
+	global $user,$base_url;
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	/*$user_data = user_load($user->uid);
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);*/
+	drupal_add_js( array( 'base_url' => $base_url ), 'setting' ); 
+	
+	/*if(arg(2)=="evento"){
+		if(arg(3)){ $id_evento=arg(3);}else{$id_evento=0;}	
+	}*/
+	
+
+	/*$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["agendamiento_id"]=$id_evento;
+	$datos["base_url"]=$base_url;*/ 
+		
+	$resultado=_agendamiento_db_get_evento($datos); 	 
+
+	return $resultado;	
+}
+ 
+ 
+
+/**
+  * _agendamiento_get_aplicacion_current_user
+  * obtiene el id de la aplicacion del usuario actual
+**/
+function _agendamiento_get_aplicacion_current_user($user_data){
+	
+	$id_aplicacion=0;
+	if(isset($user_data->field_app[LANGUAGE_NONE])){
+		$id_aplicacion=$user_data->field_app[LANGUAGE_NONE][0]["tid"];
+	}
+	
+	return $id_aplicacion;	
+} 
+ 
+/**
+  * _agendamiento_get_aplicacion_current_user
+  * obtiene el id del servicio del usuario actual
+**/
+function _agendamiento_get_servicio_current_user($user_data){
+	
+	$id_servicio=0;
+	if(isset($user_data->field_se[LANGUAGE_NONE])){
+		$id_servicio=$user_data->field_se[LANGUAGE_NONE][0]["tid"];
+	}
+	return $id_servicio;	
+} 
+
+
+/**
+  * _agendamiento_get_especialidades
+  * obtiene el listado de especialidades
+**/ 
+function _agendamiento_get_motivos_cita(){
+ 	global $user;
+ 	$path = drupal_get_path('module', 'agendamiento');
+ 	require_once "$path/includes/agendamiento.db.inc";
+ 	$user_data = user_load($user->uid);
+		 	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+ 	$datos=array();
+ 	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+ 
+ 	$resultado=_agendamiento_db_get_motivos_cita($datos); 
+ 	$data=array();
+ 	$data[""]='Seleccione un valor'; 
+ 	foreach($resultado as $row){  
+  		$data[$row["id"]]=strtoupper($row["nombre"]);  
+ 	}
+ 	return $data;
+}
+
+
+
+/**
+  * _agendamiento_get_especialidades
+  * obtiene el listado de especialidades
+**/ 
+function _agendamiento_get_especialidades(){
+ 	global $user;
+ 	$path = drupal_get_path('module', 'agendamiento');
+ 	require_once "$path/includes/agendamiento.db.inc";
+ 	$user_data = user_load($user->uid);
+		 	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+ 	$datos=array();
+ 	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+ 
+ 	$resultado=_agendamiento_db_get_especialidades($datos); 
+ 	$data=array();
+ 	$data[""]='Seleccione un valor'; 
+ 	foreach($resultado as $row){  
+  		$data[$row["id"]]=strtoupper($row["nombre"]);  
+ 	}
+ 	return $data;
+}
+
+
+/**
+  * _agendamiento_get_especialidades
+  * obtiene el listado de especialidades
+**/ 
+function _agendamiento_get_especialidades_calendario(){
+ 	global $user;
+ 	$path = drupal_get_path('module', 'agendamiento');
+ 	require_once "$path/includes/agendamiento.db.inc";
+ 	$user_data = user_load($user->uid);
+		 	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+ 	$datos=array();
+ 	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+ 
+ 	$resultado=_agendamiento_db_get_especialidades($datos); 
+ 	$data=array();
+	$i=0; 
+	foreach($resultado as $row){  
+		$data[$i]["id"]=$row["id"];
+		$data[$i]["text"]=strtoupper($row["nombre"]);
+		$i++;  
+	}	
+	return $data;
+}
+
+
+
+	
+
+
+
+/**
+  * _agendamiento_get_jerarquia
+  * obtiene la jerarquia de Sede, Especialidad, y especialista
+**/ 
+function _agendamiento_get_jerarquia(){
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$datos=array();
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_especialidad"]=11081;
+	
+	$resultado=_agendamiento_db_get_jerarquia($datos); 
+	$data=array();
+	$data[""]='Seleccione un valor'; 
+	foreach($resultado as $row){  
+		$data[$row["id"]]=strtoupper($row["nombre"]);  
+	}
+	$data=_agendamiento_set_jerarquia($resultado);
+	return $data;
+}
+
+
+function _agendamiento_get_jerarquia_especialidad(){ 
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$datos=array();
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_especialidad"]=is_numeric($_POST["id_especialidad"])?$_POST["id_especialidad"]:0;
+	
+	$resultado=_agendamiento_db_get_jerarquia_especialidad($datos); 
+	$data=array();
+	$data[""]='Seleccione un valor'; 
+	foreach($resultado as $row){  
+		$data[$row["id"]]=strtoupper($row["nombre"]);  
+	}
+	$data=_agendamiento_set_jerarquia($resultado);
+	drupal_json_output($data);
+	exit(0);
+}
+
+
+function _agendamiento_get_especialistas(){ 
+
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$variables=_agendamiento_get_variables();
+
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$datos=array();
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_especialidad"]=is_numeric($_POST["id_especialidad"])?$_POST["id_especialidad"]:0;
+	$datos["id_sede"]=is_numeric($_POST["id_sede"])?$_POST["id_sede"]:0;
+	
+	if($variables["asignacion_especialista"]=="automatico"){
+		$resultado=_agendamiento_db_get_especialista_automatico($datos); //obtiene el especialista con menos asignacion de citas	
+	}else{
+		$resultado=_agendamiento_db_get_especialistas($datos); //obtiene los especialistas de la especialidad y la sede seleccionadas	
+		if($variables["asignacion_especialista"]=="aleatorio"){
+			$registros=count($resultado); //Cantidad de especialistas
+			$aleatorio=rand(0,($registros-1)); //obtiene un numero aleatorio entre 0 y la cantidad de especialistas, para  seleccionarlo por suerte
+			if($aleatorio<0 || $aleatorio>=$registros){$aleatorio=0;} //valida que el aleatorio haya sido generado entre el 0 y el maximo de registros -1 en caso de no ser asi, por defecto toma el cero
+			$especialista=$resultado[$aleatorio];
+			$resultado=array();
+			$resultado[0]=$especialista;
+		}		
+	}
+
+	
+	$data=array();
+	$i=0; 
+	foreach($resultado as $row){  
+		$data[$i]["id"]=$row["id"];
+		$data[$i]["text"]=strtoupper($row["nombre"]);
+		$i++;  
+	}	
+	drupal_json_output($data);
+	exit(0);
+}
+
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/
+function _agendamiento_get_medios_atencion(){
+	global $user;
+ 	$path = drupal_get_path('module', 'agendamiento');
+ 	require_once "$path/includes/agendamiento.db.inc";
+ 	$user_data = user_load($user->uid);
+		 	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+ 	$datos=array();
+ 	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+
+ 	$resultado=_agendamiento_db_get_medios_atencion($datos); 
+ 	
+	$data=array(); 
+	foreach($resultado as $row){  
+		$data[$row["id"]]=strtoupper($row["nombre"]); 
+	}	
+	return $data; 
+}
+
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/
+function _agendamiento_get_reagendamientos_evento($agendamiento_id){
+	global $user;
+ 	$path = drupal_get_path('module', 'agendamiento');
+ 	require_once "$path/includes/agendamiento.db.inc";
+	
+ 	$datos=array();
+ 	$datos["agendamiento_id"]=$agendamiento_id;
+	$datos["estado_id"]=1; // Se envia el estado 1 que es activo, para verificar cuantas citas del mismo codigo en estado 1 hay, estas serian las reagendadas
+
+ 	$resultado=_agendamiento_db_get_reagendamientos_evento($datos); 	
+	return $resultado[0]["cantidad"]; 
+}
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/
+function _agendamiento_get_revisiones($agendamiento_id){
+	global $user;
+ 	$path = drupal_get_path('module', 'agendamiento');
+ 	require_once "$path/includes/agendamiento.db.inc";
+	
+ 	$datos=array();
+ 	$datos["agendamiento_id"]=$agendamiento_id;
+
+ 	$resultado=_agendamiento_db_get_revisiones($datos); 	
+	return $resultado; 
+}
+
+
+function _agendamiento_get_cliente(){
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	$datos=array();
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["numero_documento"]=$_POST["numero_documento"];
+	
+	$resultado=_agendamiento_db_get_cliente($datos); 
+		
+	drupal_json_output($resultado);
+	exit(0);
+}
+
+
+function _agendamiento_set_evento_cambia_estado(){
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	$tipos_evento=_agendamiento_get_tipos_evento();
+	
+	$datos=array();
+	
+	$datos["agendamiento_id"]=$_POST["agendamiento_id"];
+	$datos["estado"]=$_POST["estado_id"];
+	$datos["tipo_evento"]=$tipos_evento[$_POST["estado_id"]];
+	$datos["fecha_actualizacion"]=date("m/d/Y H:i:s");
+	$datos["usuario_actualiza"]=$user->uid;
+	
+	$resultado=_agendamiento_db_update_agendamiento_cambia_estado($datos); 
+	if($resultado[0]["status"]==1){
+		$evento=_agendamiento_db_get_evento($datos);
+		
+		$fecha_desde_array=explode(" ",$evento[0]["fecha_inicial"]);
+		$fecha_desde_only=explode("-",$fecha_desde_array[0]);
+		$fecha_desde_convert=$fecha_desde_only[1]."/".$fecha_desde_only[2]."/".$fecha_desde_only[0]." ".$fecha_desde_array[1];
+		
+		$fecha_hasta_array=explode(" ",$evento[0]["fecha_final"]);
+		$fecha_hasta_only=explode("-",$fecha_hasta_array[0]);
+		$fecha_hasta_convert=$fecha_hasta_only[1]."/".$fecha_hasta_only[2]."/".$fecha_hasta_only[0]." ".$fecha_desde_array[1];
+		
+		$fecha_reg_array=explode(" ",$evento[0]["fecha_registro"]);
+		$fecha_reg_only=explode("-",$fecha_reg_array[0]);
+		$fecha_reg_convert=$fecha_reg_only[1]."/".$fecha_reg_only[2]."/".$fecha_reg_only[0]." ".$fecha_reg_array[1];
+		
+		$datos["id_aplicacion"]=$id_aplicacion;
+		$datos["id_servicio"]=$id_servicio;
+		$datos["cliente"]=$evento[0]["cliente_id"];
+		$datos["especialidad"]=$evento[0]["especialidad_id"];
+		$datos["pais"]=$evento[0]["pais_cita"];
+		$datos["depto"]=$evento[0]["depto_cita"];
+		$datos["ciudad"]=$evento[0]["ciudad_cita"];
+		$datos["sede"]=$evento[0]["sede_id"];
+		$datos["especialista"]=$evento[0]["especialista_id"];
+		$datos["medio_atencion"]=$evento[0]["medio_atencion_id"];
+		$datos["fecha_desde"]=$fecha_desde_convert; // viene en YYYY-MM-DD  y debe quedar MM/DD/YYYY
+		$datos["fecha_hasta"]=$fecha_hasta_convert;
+		$datos["asunto"]=$evento[0]["asunto"];
+		$datos["descripcion"]=$_POST["observacion"];
+		$datos["usuario_crea"]=$evento[0]["usuario_creo_id"];
+		$datos["fecha_creacion"]=$fecha_reg_convert;
+		$datos["codigo"]=$evento[0]["codigo"];
+		
+		$result_put=_agendamiento_db_insert_agendamiento_revision($datos);
+		$return=$result_put; 
+	}else{
+		$return[0]["status"]=0;
+	}
+	drupal_json_output($return);
+	exit(0);
+}
+
+
+function _agendamiento_set_agendamiento(){
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	
+	//Setea datos para cliente
+	$datos=array();
+	$datos["id_aplicacion"]=$id_aplicacion;
+	$datos["id_servicio"]=$id_servicio;
+	$datos["id_cliente"]=$_POST["cliente"];
+	$datos["numero_documento"]=$_POST["numero_documento"];
+	$datos["tipo_documento"]=$_POST["tipo_documento"];
+	$datos["nombres_cliente"]=$_POST["nombres_cliente"];
+	$datos["apellidos_cliente"]=$_POST["apellidos_cliente"];
+	$datos["fecha_nacimiento"]=$_POST["fecha_nacimiento"];
+	$datos["telefono_fijo"]=$_POST["telefono_fijo"];
+	$datos["extension_fijo"]=$_POST["extension_fijo"];
+	$datos["telefono_celular"]=$_POST["telefono_celular"];
+	$datos["correo_electronico"]=$_POST["correo_electronico"];
+	$datos["pais_cliente"]=$_POST["pais_cliente"];
+	$datos["depto_cliente"]=$_POST["depto_cliente"];
+	$datos["ciudad_cliente"]=$_POST["ciudad_cliente"];
+	$datos["direccion"]=$_POST["direccion"];
+
+	//obtiene el cliente, para saber si existe o no, si existe, se actualiza la info, sino existe, se crea
+	$resultado=_agendamiento_db_get_cliente($datos); 
+	if($resultado[0]["existe"]==1){
+		
+		$datos["id_cliente"]=$resultado[0]["cliente_id"];
+		$result_put=_agendamiento_db_update_cliente($datos); 	
+	}else{
+		$result_put=_agendamiento_db_insert_cliente($datos); 
+	}
+	//Verifica que el update o el insert se haya ejecutado exitosamente, si es asi, se procede a crear el agendamiento, 
+	//en caso contrario se informara el error, y no se creara el agendamiento
+	if($result_put[0]["status"]==1){
+		$tipos_evento=_agendamiento_get_tipos_evento();
+		$datos=array();
+		$datos["id_aplicacion"]=$id_aplicacion;
+		$datos["id_servicio"]=$id_servicio;
+		$datos["especialidad"]=$_POST["especialidad"];
+		$datos["pais"]=$_POST["pais"];
+		$datos["depto"]=$_POST["depto"];
+		$datos["ciudad"]=$_POST["ciudad"];
+		$datos["sede"]=$_POST["sede"];
+		$datos["especialista"]=$_POST["especialista"];
+		$datos["tipo_evento"]=$tipos_evento[$_POST["estado"]];
+		$datos["medio_atencion"]=$_POST["medio_atencion"];
+		$datos["fecha_desde"]=$_POST["fecha_desde"];
+		$datos["fecha_hasta"]=$_POST["fecha_hasta"];
+		$datos["estado"]=$_POST["estado"];
+		$datos["asunto"]=$_POST["asunto"];
+		$datos["motivo_cita"]=$_POST["motivo_cita"];
+		$datos["descripcion"]=$_POST["descripcion"];
+		$datos["cliente"]=$result_put[0]["id_cliente"];
+		$datos["usuario_crea"]=$user->uid;
+		$datos["usuario_actualiza"]=$user->uid;
+		$datos["fecha_creacion"]=date("m/d/Y H:i:s");
+		$datos["fecha_actualizacion"]=date("m/d/Y H:i:s");
+		
+		//Se obtiene el serial para el servicio 
+		$result_serial=_agendamiento_db_get_serial($datos);
+		if(count($result_serial)==0){ //indica que no hay registro de serial, por lo tanto se inserta un registro inicial
+			$term=taxonomy_term_load($id_servicio);
+			//Configuracion
+			$valor_inicial=0;	
+			if(isset($term->field_agvaic[LANGUAGE_NONE])){//si existe, indica que el usuario tiene esta configuracion
+				$valor_inicial=$term->field_agvaic[LANGUAGE_NONE][0]["value"];
+			}
+			
+			
+			$datos["valor_inicial"]=$valor_inicial;
+			$datos["serial"]=1;						
+			$result_put_serial=_agendamiento_db_insert_serial($datos);			
+		}else{
+			$datos["valor_inicial"]=$result_serial[0]["valor_inicial"];
+			$datos["serial"]=(int)$result_serial[0]["serial"]+1;
+			$result_put_serial=_agendamiento_db_update_serial($datos);		
+		}		
+		
+		if($result_put_serial[0]["status"]==1){//si logro ejecutar la operacion de almacenar el serial, se procede a hacer el insert de agendamiento		
+			//se arma el codigo, que equivale a sumar el valor inicial + el serial 
+			$datos["codigo"]=(int)$datos["valor_inicial"]+(int)$datos["serial"];
+			$result_put=_agendamiento_db_insert_agendamiento($datos); 
+			if($result_put[0]["status"]==1){
+				$datos["agendamiento_id"]=$result_put[0]["agendamiento_id"];
+				$result_put=_agendamiento_db_insert_agendamiento_revision($datos); 	
+			}
+			$return=$result_put; 
+			 	
+		}else{
+			$return[0]["status"]=0;	
+		}
+	}else{
+		$return[0]["status"]=0;
+	}
+		
+	_agendamiento_set_notifica_especialista($datos);
+	
+	$return[0]["html"]=_agendamiento_get_layout_registro($result_put);
+	
+	drupal_json_output($return);
+	exit(0);
+}
+
+
+function _agendamiento_set_notifica_especialista($datos){
+	
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.mail.inc";
+	
+	$data["usuarios"][0]=$datos["especialista"];
+	$data["clientes"][0]=array("mail"=>$datos["correo_electronico"],
+								 "nombre_cliente"=>$datos["nombres_cliente"]." ".$datos["apellidos_cliente"]);
+	
+	$data["agendamiento_id"]=$datos["agendamiento_id"];
+	_agendamiento_speciality_mail($data);
+}
+
+function _agendamiento_set_agendamiento_reagendar(){
+	global $user;
+	$path = drupal_get_path('module', 'agendamiento');
+	require_once "$path/includes/agendamiento.db.inc";
+	$user_data = user_load($user->uid);
+	
+	$id_aplicacion=_agendamiento_get_aplicacion_current_user($user_data);
+	$id_servicio=_agendamiento_get_servicio_current_user($user_data);
+	$tipos_evento=_agendamiento_get_tipos_evento();
+    $datos=array();
+	
+	$datos["agendamiento_id"]=$_POST["agendamiento_id"];
+	$datos["estado"]=1;//Se envia como activo, aunque sea reagendado. 
+	$datos["sede"]=$_POST["sede"];
+	$datos["especialista"]=$_POST["especialista"];
+	$datos["fecha_desde"]=$_POST["fecha_desde"];
+	$datos["fecha_hasta"]=$_POST["fecha_hasta"];
+	$datos["tipo_evento"]=$tipos_evento[$datos["estado"]];
+	$datos["medio_atencion"]=$_POST["medio_atencion"];
+	$datos["asunto"]=$_POST["asunto"];
+	$datos["descripcion"]=$_POST["descripcion"];
+	$datos["fecha_actualizacion"]=date("m/d/Y H:i:s");
+	$datos["usuario_actualiza"]=$user->uid;
+	
+	
+	$resultado=_agendamiento_db_update_agendamiento_reagendar($datos); 
+	if($resultado[0]["status"]==1){
+		$evento=_agendamiento_db_get_evento($datos);
+		
+		$fecha_reg_array=explode(" ",$evento[0]["fecha_registro"]);
+		$fecha_reg_only=explode("-",$fecha_reg_array[0]);
+		$fecha_reg_convert=$fecha_reg_only[1]."/".$fecha_reg_only[2]."/".$fecha_reg_only[0]." ".$fecha_reg_array[1];
+		
+		$datos["id_aplicacion"]=$id_aplicacion;
+		$datos["id_servicio"]=$id_servicio;
+		$datos["cliente"]=$evento[0]["cliente_id"];
+		$datos["especialidad"]=$evento[0]["especialidad_id"];
+		$datos["pais"]=$evento[0]["pais_cita"];
+		$datos["depto"]=$evento[0]["depto_cita"];
+		$datos["ciudad"]=$evento[0]["ciudad_cita"];
+		$datos["asunto"]=$evento[0]["asunto"];
+		$datos["usuario_crea"]=$evento[0]["usuario_creo_id"];
+		$datos["fecha_creacion"]=$fecha_reg_convert;
+		$datos["codigo"]=$evento[0]["codigo"];
+		
+		$result_put=_agendamiento_db_insert_agendamiento_revision($datos);
+		$return=$result_put; 
+	}else{
+		$return[0]["status"]=0;
+	}
+			 	
+	
+	$return[0]["html"]=_agendamiento_get_layout_reagendamiento($return);
+	
+	drupal_json_output($return);
+	exit(0);
+}
+
+
+function _agendamiento_get_layout_registro($datos){
+	global $base_url;
+	if($datos[0]["status"]==1){
+			$output='
+					<div class="jumbotron">
+						  <h1><span class="label label-success">Cita creada correctamente</span></h1>
+						  <p>El código de seguimiento es <span class="label label-danger">'.$datos[0]["codigo"].'</span></p>
+						  <p>Puede ver la información de la cita <a id="enlace-eventoto" href="'.$base_url.'/agendamiento/calendario/evento/'.$datos[0]["agendamiento_id"].'">Aquí</a></p>
+				   </div>
+					';
+	}else{
+			$output='
+					<div class="jumbotron">
+						  <h1><span class="label label-danger">Error</span></h1>
+						  <p>ha ocurrido un error en la creación de la cita, intentelo nuevamente</p>
+					</div>
+					';	
+		}
+	return $output;
+}
+
+function _agendamiento_get_layout_reagendamiento($datos){
+	global $base_url;
+	if($datos[0]["status"]==1){
+			$output='
+					<div class="jumbotron">
+						  <h1><span class="label label-success">Cita reagendada correctamente</span></h1>
+						  <p>El código de seguimiento es <span class="label label-danger">'.$datos[0]["codigo"].'</span>, es el mismo de la cita original</p>
+						  <p>Puede ver la información de ls cita <a id="enlace-eventoto" href="'.$base_url.'/agendamiento/calendario/evento/'.$datos[0]["agendamiento_id"].'">Aquí</a></p>
+				   </div>
+					';
+	}else{
+			$output='
+					<div class="jumbotron">
+						  <h1><span class="label label-danger">Error</span></h1>
+						  <p>ha ocurrido un error en el reagendamiento, intentelo nuevamente</p>
+					</div>
+					';	
+		}
+	return $output;
+}
+
+
+
+
+
+
+
+function _agendamiento_get_especialista_configuracion(){	
+	$data=array();
+	_agendamiento_get_usuario_configuracion($_POST["id_especialista"],$data);			
+	drupal_json_output($data);
+	exit(0);
+	
+}
+
+
+
+/**
+  * _agendamiento_set_jerarquia
+  * asigna una estrucutra, a una variable para generar jerarquia.
+**/
+function _agendamiento_set_jerarquia($lista){
+	$data=array();
+	$data=_agendamiento_get_children_jerarquia(0,$lista);
+	return $data;	
+}
+
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/
+function _agendamiento_get_children_jerarquia($padre,&$lista){
+	$data=array();	
+		$i=0;
+		foreach($lista as $key=>$value ){
+			if($value["padre"]==$padre){
+				$data[$i]["id"]=$value["id"];
+				$data[$i]["text"]=$value["nombre"];				
+				$data[$i]["children"]=_agendamiento_get_children_jerarquia($value["id"],$lista);	
+				$i++;			
+			}
+				
+		}
+	
+	return $data;
+}
+
+
+
+function _agendamiento_get_tipos_evento(){
+	$data=array("1"=>"event-info", //azul
+				"2"=>"event-success",//Verde 
+				"3"=>"event-warning", //Amarillo
+				"4"=>"event-inverse",//Gris
+				"5"=>"event-important", //Rosado
+				"6"=>"event-special");//Moraleche 
+	return $data;
+}
+
+function _agendamiento_get_color_estado(){
+	$data=array("1"=>"info", //azul claro
+				"2"=>"success",//Verde 
+				"3"=>"warning", //Amarillo
+				"4"=>"inverse",//Gris
+				"5"=>"danger", //Rojo
+				"6"=>"primary");//Azul normal 
+	return $data;
+}
+
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/
+function _agendamiento_get_estados(){
+	$data=array("_none"=>"Seleccione",
+			    "1"=>"ACTIVO", //azul claro
+				"2"=>"ATENDIDO", //Verde
+				"3"=>"NO ATENDIDO", //Amarillo 
+				"4"=>"CANCELADO", // Gris
+				"5"=>"ANULADO",//Rojo
+				"6"=>"REAGENDADO");// Azul oscuro El estado 6, no es un estado, es una interpretacion, en la cantida de veces que se edita la cita, no debe aparecer como estado, pero si tiene su color 
+	
+	return $data;
+}
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/ 
+function _agendamiento_get_tipos_documento(){
+	$data=array("_none"=>"Seleccione",
+			    "1"=>"CEDULA", 
+				"2"=>"PASAPORTE",
+				"3"=>"RUT", 
+				"4"=>"NIT",
+				"5"=>"CEDULA EXT");
+	
+	return $data;
+}
+
+/**
+  * _agendamiento_get_children_jerarquia
+  * obtiene la jerarquia de una array, teniendo en cuenta la recursividad de los hijos.
+**/ 
+function _agendamiento_get_textos(){
+	$data=array("nombre_evento"=>"Cita",
+				"titulo_evento"=>"Citas",
+				"crear_evento"=>"Crear cita",
+				"crear_reagendar"=>"Reagendar cita",
+				"label_reagendar"=>"Reagendar una cita",
+				"detalle_evento"=>"Detalle de cita",
+				"label_evento"=>"La cita",
+				"atendido"=>"ATENDIDA",
+				"no_atendido"=>"NO ATENDIDA",
+				"cancelado"=>"CANCELADA",
+				"anulado"=>"ANULADA",
+				"titulo_datos_evento"=>"Datos Cita",
+				"nuevo_evento"=>"Nueva Cita",
+				"consulta_evento"=>"Consultar Citas",
+				"label_posterior"=>"crear una nueva cita",
+				"reagendar_evento"=>"Reagendar Cita",
+				"filtro_evento"=>"Filtro de citas",
+				"mensaje_evento"=>"de la nueva cita",
+				"hoy_eventos"=>"Citas para el dia de hoy",
+				"manana_eventos"=>"Citas para el dia de mañana",
+				"total_eventos_estado"=>"Total citas por estado",
+				"total_eventos_tipo"=>"Total citas por tipo",
+				"total_eventos_medio"=>"Total citas por medio",
+				"fecha_actual"=>"Hoy es",
+				"cancelar_evento"=>"Cancelar cita",
+				"reagendar_evento"=>"Reagendar cita",
+				"anular_evento"=>"Anular cita",
+				"atender_evento"=>"Atender cita",
+				"noatender_evento"=>"No Atender cita",
+			    );
+	
+	return $data;
+}
+

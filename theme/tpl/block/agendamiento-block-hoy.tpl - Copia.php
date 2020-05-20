@@ -1,0 +1,22 @@
+<table class="table">
+	<thead>
+    	<tr>
+        	<th>AAAAA</th>
+           <th>bbbbb</th>
+        </tr>
+    </thead>
+    <tbody>
+    	<tr>
+        	<td>AAAAA</td>
+           <td>bbbbb</td>
+        </tr>
+        <tr>
+        	<td>AAAAA</td>
+           <td>bbbbb</td>
+        </tr>
+        <tr>
+        	<td>AAAAA</td>
+           <td>bbbbb</td>
+        </tr>
+    </tbody>
+</table>

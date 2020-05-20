@@ -1,0 +1,49 @@
+/*Estilos personalizados para agendamiento*/
+
+/*Estilos de creacion de evento y edicion*/ 
+.oculto{ display:none;}
+.bloqueo{ height:36px; width:100%; background:#ddd; margin-top:-50px; float:left; position:relative; display:none; -moz-border-radius:5px; -webkit-border-radius:5px; border-radius:5px; opacity:0.5;} 
+#modal-final .jumbotron h1{ margin-bottom:40px; font-size:25px;} 
+#edit-datos-basicos{ display:none;}
+#edit-datos-evento{ display:none;}
+#agendamiento-node-form #edit-fecha-desde.form-control[readonly]{ background:#FFF;}
+#agendamiento-node-form #edit-fecha-nacimiento.form-control[readonly]{ background:#FFF;}
+
+/*Estilos detllae evento*/
+
+.panel-inverse{border-color: #222;}
+.panel-inverse>.panel-heading {color: #333;background-color: #CCC;border-color: #BBB;}
+
+.recomendaciones-evento ul li{ margin-bottom:20px;}
+
+
+/*Estilos para tablero de control */ body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-actual .pane-content,
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-hoy .pane-content,
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-manana .pane-content
+{ height:250px; overflow:auto;}
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-actual .date-current .day{ font-size:125px; font-weight:bold; color:#F00; text-align:center;}
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-actual .date-current .day a:hover{ text-decoration:none;}
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-actual .date-current .info{ margin-top:-35px;}
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-actual .date-current .week-day{ font-size:40px; font-weight:bold; color:#F00; text-align:center; }
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-actual .date-current .month-year{ font-size:20px; font-weight:bold; color:#333; text-align:center;}
+body.page-tablero-control .pane-block .no-data .text-big span.glyphicon {font-size: 140px;}
+body.page-tablero-control .pane-block .no-data h3 {font-size: 31px; font-weight:bold;}
+
+/*Estilos tablero de control flot pie*/
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-resumen-estado .pane-content,
+body.page-tablero-control .pane-block.pane-agendamiento-agendamiento-resumen-medio .pane-content
+{height:300px; overflow:auto;}
+
+body.page-tablero-control  #grafica-estados { width: 350px; height: 210px; }
+body.page-tablero-control  #grafica-estados .legend table, .legend > div { height: 200px !important; opacity: 1 !important; left: 230px; top: 10px; width: 160px !important; }
+body.page-tablero-control  #grafica-estados .legend table { border: 1px solid #555; padding: 5px; }
+
+body.page-tablero-control  #grafica-medios { width: 350px; height: 210px; }
+body.page-tablero-control  #grafica-medios .legend table, .legend > div { height: 200px !important; opacity: 1 !important; left: 230px; top: 10px; width: 160px !important; }
+body.page-tablero-control  #grafica-medios .legend table { border: 1px solid #555; padding: 5px; }
+
+body.page-tablero-control  #grafica-tipos { width: 350px; height: 210px; }
+body.page-tablero-control  #grafica-tipos .legend table, .legend > div { height: 200px !important; opacity: 1 !important; left: 230px; top: 10px; width: 160px !important; }
+body.page-tablero-control  #grafica-tipos .legend table { border: 1px solid #555; padding: 5px; }
+
+

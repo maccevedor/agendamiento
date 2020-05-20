@@ -1,0 +1,364 @@
+<?php
+
+/**
+ * @file
+ * Archivo principal del modulo Agendamiento.
+ */
+ 
+  /**
+ * implimentation of hook_permission()
+ */
+
+function agendamiento_permission() {
+  return array(    
+	 'ver agendamiento' => array(
+      'title' => t('Ver los eventos agendados en un calendario"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder ver el calendario de eventos, desde esta interfaz, se podra identificar los eventos de todo el modulo de agendamiento.'),
+     ),  
+     'adicionar evento' => array(
+      'title' => t('Adicionar evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder adicionar eventos nuevos, con esta funcionalidad se pueden crear nuevos eventos en el calendario de agendamiento.'),
+     ),	 
+     'editar evento' => array(
+      'title' => t('Editar evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder editar el evento, desde esta funcionalidad podra cambiar la hora, el dia, incluso la sede y la especialidad.'),
+     ),
+	 'eliminar evento' => array(
+      'title' => t('Eliminar evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder eliminar un evento, esta opción desaparece un evento del sistema de agendamiento.'),
+     ),
+	 'anular evento' => array(
+      'title' => t('Anular evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder anular un evento, esta opción anula un evento, seguira almacenado en la base de datos, pero solo podra ser visto por el administrador.'),
+     ),
+	 'cancelar evento' => array(
+      'title' => t('Cancelar evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder cancelar un evento, esta opción permite al usuario poder cancelar el evento, quedará en estado de cancelación.'),
+     ),
+	 'atender evento' => array(
+      'title' => t('Atender evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder atender un evento, esta opción permite al usuario poder cancelar el evento, quedará en estado de atendido.'),
+     ),	
+	 'no atender evento' => array(
+      'title' => t('No atender evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder no atender un evento, esta opción permite al usuario poder cancelar el evento, quedará en estado de no atendido.'),
+     ),	
+	 'reagendar evento' => array(
+      'title' => t('Re-agendar evento"'),
+	  'description'=>t('Si activa este permiso,  se otorgara acceso al rol a poder reagendar un evento, esta opción permite al usuario poder cancelar el evento, quedará en estado de reagendar.'),
+     ),	 
+	 
+  );
+}
+
+
+/**
+ * Implements hook_menu(). 
+ */
+function agendamiento_menu() {
+   $path = drupal_get_path('module', 'agendamiento');
+   require_once "$path/agendamiento.include";
+   $textos=_agendamiento_get_textos();
+   
+   $items['agendamiento/calendario'] = array(
+			'title' => t('Calendario'),    
+			'page callback' => '_agendamiento_calendario',
+			'file' => 'agendamiento.include',
+			'access arguments' => array('ver agendamiento'),
+			'type' => MENU_NORMAL_ITEM,
+		  );
+		  
+	$items['agendamiento/calendario/nuevo'] = array(
+			'title' => t(''. $textos["nuevo_evento"].''),    
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('_agendamiento_add_evento'),			
+			'file' => 'includes/agendamiento.form.inc',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_NORMAL_ITEM,
+		  );
+	$items['agendamiento/calendario/consulta'] = array(
+			'title' => t(''. $textos["consulta_evento"].''),    
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('_agendamiento_get_consulta_eventos'),			
+			'file' => 'includes/agendamiento.form.inc',
+			'access arguments' => array('ver agendamiento'),
+			'type' => MENU_NORMAL_ITEM,
+		  );
+		  
+	$items['agendamiento/calendario/consulta/listado'] = array(
+			'title' => t('Listado eventos'),    
+			'page callback' => '_agendamiento_get_listado_eventos',
+			'file' => 'agendamiento.include',
+			'access arguments' => array('ver agendamiento'),
+			'type' => MENU_CALLBACK,
+		  );	  	  
+		  
+	$items['agendamiento/calendario/reagendar'] = array(
+			'title' => t(''. $textos["reagendar_evento"].''),    
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('_agendamiento_reagendar_evento'),		
+			'file' => 'includes/agendamiento.form.inc',
+			'access arguments' => array('reagendar evento'),
+			'type' => MENU_CALLBACK,
+		  );	  
+		  	  
+   $items['agendamiento/calendario/eventos'] = array(
+			'title' => t('Obtener eventos'),    
+			'page callback' => '_agendamiento_get_eventos',
+			'file' => 'agendamiento.include',
+			'access arguments' => array('ver agendamiento'),
+			'type' => MENU_CALLBACK,
+		  );
+		  
+	$items['agendamiento/calendario/evento'] = array(
+			'title' => t('Ver evento'),    
+			'page callback' => '_agendamiento_get_evento',
+			'file' => 'agendamiento.include',
+			'access arguments' => array('ver agendamiento'),
+			'type' => MENU_CALLBACK,
+		  ); 
+		  	  
+	$items['agendamiento/calendario/evento/cambia-estado'] = array(
+			'title' => t('Atender evento'),    
+			'page callback' => '_agendamiento_set_evento_cambia_estado',
+			'file' => 'agendamiento.include',
+			'access arguments' => array('ver agendamiento'),
+			'type' => MENU_CALLBACK,
+		  ); 		  
+			  	  
+   $items['agendamiento/calendario/cliente'] = array(
+			'title' => t('Obtener informacion del cliente'),    
+			'page callback' => '_agendamiento_get_cliente',
+			'file' => 'agendamiento.include',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_CALLBACK,
+		  );	  
+		  
+	$items['agendamiento/calendario/nuevo/guardar'] = array(
+			'title' => t('Guardar Nuevo Evento'),  
+			'page callback' => '_agendamiento_set_agendamiento',	
+			//'page arguments' => array('_agendamiento_set_agendamiento'),			
+			'file' => 'agendamiento.include',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_CALLBACK,
+		  );
+		  
+	$items['agendamiento/calendario/nuevo/validar'] = array(
+			'title' => t('Validar hora evento'),  
+			'page callback' => '_agendamiento_get_evento_hora',
+			//'page arguments' => array('_agendamiento_get_evento_hora'),			
+			'file' => 'agendamiento.include',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_CALLBACK,
+		  );
+		  
+	$items['agendamiento/calendario/reagendar/guardar'] = array(
+			'title' => t('Guardar Reagendar Evento'),  
+			'page callback' => '_agendamiento_set_agendamiento_reagendar',	
+			//'page arguments' => array('_agendamiento_set_agendamiento'),			
+			'file' => 'agendamiento.include',
+			'access arguments' => array('reagendar evento'),
+			'type' => MENU_CALLBACK,
+		  );
+		  	  	  
+	$items['agendamiento/calendario/jerarquia'] = array(
+			'title' => t('Jerarquia geografica'),  
+			'page callback' => '_agendamiento_get_jerarquia_especialidad',  
+			//'page arguments' => array('_agendamiento_get_jerarquia_especialidad'), 			
+			'file' => 'agendamiento.include',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_CALLBACK,
+		  );
+		  
+	$items['agendamiento/calendario/especialistas'] = array(
+			'title' => t('Obtiene los especialistas'),    
+			'page callback' => '_agendamiento_get_especialistas',
+			//'page arguments' => array('_agendamiento_get_especialistas'),			
+			'file' => 'agendamiento.include',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_CALLBACK,
+		  );
+	$items['agendamiento/calendario/especialistas/configuracion'] = array(
+			'title' => t('Obtiene la configuracion del especialista'),    
+			'page callback' => '_agendamiento_get_especialista_configuracion',
+			//'page arguments' => array('_agendamiento_get_especialista_configuracion'),			
+			'file' => 'agendamiento.include',
+			'access arguments' => array('adicionar evento'),
+			'type' => MENU_CALLBACK,
+		  );	  	  	  		  
+	  	  	
+	$items['admin/config/regional/agendamiento-festivos'] = array(
+			'title' => 'Dias Festivos',
+			'description' => "Configuracion dias festivos",
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('agendamiento_festivos_settings'),
+			'access arguments' => array('administer site configuration'),
+			'file' => 'includes/agendamiento.admin.inc',
+		  );			      
+  return $items;
+}
+
+
+
+/**
+ * Implements hook_theme().
+ */
+function agendamiento_theme() {
+  $path = drupal_get_path('module', 'agendamiento') .'/theme';
+  require_once "$path/theme.inc";  
+ 
+  return array(    
+    'agendamiento_mail_especialista' => array(      
+      'template' => 'agendamiento-mail-especialista',
+	  'path' => $path."/tpl/mail",
+      ),
+	
+	'agendamiento_block_actual' => array(      
+      'template' => 'agendamiento-block-actual',
+	  'path' => $path."/tpl/block",
+      ),
+	 'agendamiento_block_flot' => array(      
+      'template' => 'agendamiento-block-flot',
+	  'path' => $path."/tpl/block",
+      ), 
+	
+	'agendamiento_block_hoy' => array(      
+      'template' => 'agendamiento-block-hoy',
+	  'path' => $path."/tpl/block",
+      ),
+	  
+    'agendamiento_block_manana' => array(      
+      'template' => 'agendamiento-block-manana',
+	  'path' => $path."/tpl/block",
+      ),
+	  
+    'agendamiento_block_resumen-estado' => array(      
+      'template' => 'agendamiento-block-resumen-estado',
+	  'path' => $path."/tpl/block",
+      ),
+	  
+	 'agendamiento_block_resumen-tipo' => array(      
+      'template' => 'agendamiento-block-resumen-tipo',
+	  'path' => $path."/tpl/block",
+      ),
+	  
+	 'agendamiento_block_resumen-medio' => array(      
+      'template' => 'agendamiento-block-resumen-medio',
+	  'path' => $path."/tpl/block",
+      ),  	  
+	
+	'agendamiento_calendario_vista' => array(      
+      'template' => 'agendamiento-calendario-vista',
+	  'path' => $path."/tpl",
+      ),  
+	  
+	'agendamiento_calendario_evento' => array(      
+      'template' => 'agendamiento-calendario-evento',
+	  'path' => $path."/tpl",
+      ),
+	  
+	'agendamiento_listado_eventos' => array(      
+      'template' => 'agendamiento-listado-eventos',
+	  'path' => $path."/tpl",
+      ),    
+	  
+	'_agendamiento_get_consulta_eventos' => array(      
+      'arguments' => array('form' => NULL,),
+	  'template' => 'agendamiento-consulta-eventos',
+	  'path' => $path."/tpl",
+	  'render element' => 'form', 
+      ), 
+	 
+	  
+	'_agendamiento_add_evento' => array(      
+      'arguments' => array('form' => NULL,),
+	  'template' => 'agendamiento-calendario-nuevo-evento',
+	  'path' => $path."/tpl",
+	  'render element' => 'form', 
+      ),
+	  
+	  '_agendamiento_reagendar_evento' => array(      
+      'arguments' => array('form' => NULL,),
+	  'template' => 'agendamiento-calendario-reagenda-evento',
+	  'path' => $path."/tpl",
+	  'render element' => 'form', 
+      ),
+	  
+	    
+  );
+}
+
+
+function agendamiento_block_info() 
+{    
+	$blocks['agendamiento_actual'] = array(
+		'info' => t('Agendamiento actual'),
+	);
+	$blocks['agendamiento_hoy'] = array(
+		'info' => t('Agendamiento hoy'),
+	);
+	$blocks['agendamiento_manana'] = array(
+		'info' => t('Agendamiento mañana'),
+	);
+	$blocks['agendamiento_resumen_estado'] = array(
+		'info' => t('Agendamiento resumen estado'),
+	);	
+	$blocks['agendamiento_resumen_tipo'] = array(
+		'info' => t('Agendamiento resumen tipo'),
+	);	
+	$blocks['agendamiento_resumen_medio'] = array(
+		'info' => t('Agendamiento resumen medio'),
+	);
+	return $blocks; 
+}
+
+function agendamiento_block_view($delta = '') 
+{
+   $path = drupal_get_path('module', 'agendamiento');
+   require_once "$path/agendamiento.include";
+   $textos=_agendamiento_get_textos();
+	
+	// The $delta parameter tells us which block is being requested.
+	switch ($delta) 
+	{
+
+		case 'agendamiento_actual':
+			$path = drupal_get_path('module', 'agendamiento');
+    		require_once "$path/includes/agendamiento.block.inc";
+			$block['subject'] = t(''. $textos["fecha_actual"].'');
+			$block['content'] = _agendamiento_get_block_actual();
+			break;
+		case 'agendamiento_hoy':
+			$path = drupal_get_path('module', 'agendamiento');
+    		require_once "$path/includes/agendamiento.block.inc";
+			$block['subject'] = t(''. $textos["hoy_eventos"].'');
+			$block['content'] = _agendamiento_get_block_hoy();
+			break;			
+		case 'agendamiento_manana':
+			$path = drupal_get_path('module', 'agendamiento');
+    		require_once "$path/includes/agendamiento.block.inc";
+			$block['subject'] = t(''. $textos["manana_eventos"].'');
+			$block['content'] = _agendamiento_get_block_manana();
+			break;			
+		case 'agendamiento_resumen_estado':
+			$path = drupal_get_path('module', 'agendamiento');
+    		require_once "$path/includes/agendamiento.block.inc";
+			$block['subject'] = t(''. $textos["total_eventos_estado"].'');
+			$block['content'] = _agendamiento_get_block_resumen_estado();
+			break;
+		case 'agendamiento_resumen_tipo':
+			$path = drupal_get_path('module', 'agendamiento');
+    		require_once "$path/includes/agendamiento.block.inc";
+			$block['subject'] = t(''. $textos["total_eventos_tipo"].'');
+			$block['content'] = _agendamiento_get_block_resumen_tipo();
+			break;
+		case 'agendamiento_resumen_medio':
+			$path = drupal_get_path('module', 'agendamiento');
+    		require_once "$path/includes/agendamiento.block.inc";
+			$block['subject'] = t(''. $textos["total_eventos_medio"].'');
+			$block['content'] = _agendamiento_get_block_resumen_medio();
+			break;				
+	}
+
+	return $block;
+}
